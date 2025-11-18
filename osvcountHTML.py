@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 Generate an HTML report from /scriptdir/osvcount/data/osvcount.<YYYYMMDD>.lst
-
 Output is saved to /var/www/html/weatherdata/osvcount.html
 """
 
