@@ -1,3 +1,5 @@
+.gitignore
+osvcount.out
 *lst
 *num
 *state
