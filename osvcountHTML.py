@@ -68,9 +68,7 @@ def make_plot_png(rows: List[Tuple[int, str, datetime]]) -> bytes:
     return buf.getvalue()
 
 
-def build_html(latest_state: str, latest_count: int, latest_dt: datetime, chart_png_b64: str) -> str:
-    pretty_time = latest_dt.strftime("%H:%M")
-    pretty_date = latest_dt.strftime("%m/%d/%Y")
+def build_html(latest_state: str, latest_count: int, asof_str: str, inline_count: str, chart_png_b64: str) -> str:
 
     # Determine conditional styling for count cell
     count_style = ""
@@ -108,12 +106,13 @@ def build_html(latest_state: str, latest_count: int, latest_dt: datetime, chart_
   <div class="card">
     <h1><span class="badge {latest_state.lower()}">{latest_state.upper()}</span></h1>
     <table>
-      <thead><tr><th>Most Recent Count</th></tr></thead>
+      <thead><tr><th>Most Recent Count</th><th>Vehicles in Line</th></tr></thead>
       <tbody><tr>
         <td{count_style}>{latest_count}</td>
+        <td style="font-weight: bold; font-size: 4em;">{inline_count}</td>
       </tr>
       <tr>
-        <td>{pretty_date} @ {pretty_time}</td>
+        <td colspan="2">As of {asof_str}</td>
       </tr></tbody>
     </table>
     <img class="chart" alt="Count vs Time" src="data:image/png;base64,{chart_png_b64}">
@@ -126,20 +125,39 @@ def build_html(latest_state: str, latest_count: int, latest_dt: datetime, chart_
 def main():
     today = date.today().strftime("%Y%m%d")
     input_path = f"/scriptdir/osvcount/data/osvcount.{today}.lst"
+    asof_path = f"/scriptdir/osvcount/osvcount.asof"
+    inline_path = f"/scriptdir/osvcount/osvcount.inline"
     output_path = f"/var/www/html/weatherdata/osvcount.html"
 
     rows = read_rows(input_path)
     latest_count, latest_state, latest_dt = rows[-1]
+
+    # Read "As of" string from file, fall back to formatted timestamp
+    asof_str = latest_dt.strftime("%H:%M %m/%d/%Y")
+    if os.path.exists(asof_path):
+        with open(asof_path, "r", encoding="utf-8") as f:
+            val = f.read().strip()
+            if val:
+                asof_str = val
+
+    # Read vehicles in line, fall back to "N/A"
+    inline_count = "N/A"
+    if os.path.exists(inline_path):
+        with open(inline_path, "r", encoding="utf-8") as f:
+            val = f.read().strip()
+            if val:
+                inline_count = val
+
     png_bytes = make_plot_png(rows)
     b64 = base64.b64encode(png_bytes).decode("ascii")
-    html = build_html(latest_state, latest_count, latest_dt, b64)
+    html = build_html(latest_state, latest_count, asof_str, inline_count, b64)
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
 
     print(f"Wrote {output_path}")
-    print(f"Latest: state={latest_state} count={latest_count} at {latest_dt:%H:%M %m/%d/%Y}")
+    print(f"Latest: state={latest_state} count={latest_count} as of '{asof_str}' in-line={inline_count}")
 
 
 if __name__ == "__main__":
