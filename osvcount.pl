@@ -1,6 +1,8 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
+use POSIX qw(mktime);
+use Time::Local;
 use LWP::UserAgent;
 use File::Path qw(make_path);
 use File::Basename;
@@ -79,43 +81,9 @@ sub extract_count {
     return undef;
 }
 
-# Trigger IFTTT webhook
-#sub trigger_webhook {
-#    my ($webhook_url) = @_;
-#
-#    my $ua = LWP::UserAgent->new(timeout => 10);
-#    eval {
-#        my $response = $ua->post($webhook_url);
-#        if ($response->is_success) {
-#            print "✓ Webhook triggered successfully\n";
-#            return 1;
-#        } else {
-#            print "✗ Webhook failed with status: " . $response->status_line . "\n";
-#            return 0;
-#        }
-#    };
-#    if ($@) {
-#        print "✗ Webhook error: $@\n";
-#        return 0;
-#    }
-#}
-#
+
 # Main execution
 sub main {
-#    # Read webhook URL from file
-#    unless (-e $WEBHOOK_FILE) {
-#        print "✗ Error: $WEBHOOK_FILE not found\n";
-#        return 1;
-#    }
-#
-#    my $webhook_url = read_file($WEBHOOK_FILE);
-#    unless ($webhook_url) {
-#        print "✗ Error: Could not read webhook URL from $WEBHOOK_FILE\n";
-#        return 1;
-#    }
-#
-#    print "✓ Loaded webhook URL from $WEBHOOK_FILE\n";
-
     # Check if HTML file exists
     unless (-e $HTML_FILE) {
         print "✗ Error: $HTML_FILE not found\n";
@@ -144,7 +112,6 @@ sub main {
     # Check for state change from closed to open
     if ($previous_status eq "closed" && $current_status eq "open") {
         print "! Status changed from CLOSED to OPEN\n";
-#        trigger_webhook($webhook_url);
     } elsif ($previous_status && $previous_status ne $current_status) {
         print "Status changed from $previous_status to $current_status\n";
     }
@@ -161,6 +128,57 @@ sub main {
 
     # Extract and save "As of" time string
     my $asof = extract_asof($html_content);
+#
+# adjust time for DST abd timezone
+#
+	my $input = $asof;
+	
+    # Determine Eastern offset (EST = -5, EDT = -4)
+    # Use localtime with TZ set to America/New_York
+    my $eastern_offset;
+    {
+        local $ENV{TZ} = 'America/New_York';
+        POSIX::tzset();
+        my @t = localtime(time);
+        $eastern_offset = $t[8] ? -4 : -5;  # $t[8] is DST flag
+        # Reset TZ
+        POSIX::tzset();
+    }
+    # Parse the input string
+    my %months = (
+        Jan=>1, Feb=>2, Mar=>3, Apr=>4,  May=>5,  Jun=>6,
+        Jul=>7, Aug=>8, Sep=>9, Oct=>10, Nov=>11, Dec=>12
+    );
+    
+    my ($dow, $mon, $day, $hour, $min, $ampm) =
+        $input =~ /^(\w+),\s+(\w+)\s+(\d+)\s+at\s+(\d+):(\d+)\s+(AM|PM)$/;
+    
+    # Convert to 24-hour
+    $hour += 12 if $ampm eq 'PM' && $hour != 12;
+    $hour  = 0  if $ampm eq 'AM' && $hour == 12;
+    
+    # Apply Eastern offset
+    $hour += $eastern_offset;
+    
+    # Handle day rollover
+    if ($hour < 0) {
+        $hour += 24;
+        # Adjust day of week
+        my @days = qw(Sun Mon Tue Wed Thu Fri Sat);
+        my %day_idx = map { $days[$_] => $_ } 0..$#days;
+        $dow = $days[($day_idx{$dow} - 1 + 7) % 7];
+        $day--;
+    }
+    
+    # Convert back to 12-hour
+    $ampm = $hour >= 12 ? 'PM' : 'AM';
+    $hour = $hour % 12;
+    $hour = 12 if $hour == 0;
+    my $output = sprintf("%s, %s %d at %02d:%02d %s", $dow, $mon, $day, $hour, $min, $ampm);
+    $asof = $output;
+#
+# End of DST timezone correction
+#
     if (defined $asof) {
         write_file($ASOF_FILE, $asof);
         print "✓ As of: $asof (saved to $ASOF_FILE)\n";
@@ -182,4 +200,5 @@ sub main {
 #
 # Run main
 exit main();
+
 
