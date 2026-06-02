@@ -68,7 +68,7 @@ def make_plot_png(rows: List[Tuple[int, str, datetime]]) -> bytes:
     return buf.getvalue()
 
 
-def build_html(latest_state: str, latest_count: int, asof_str: str, inline_count: str, chart_png_b64: str) -> str:
+def build_html(latest_state: str, latest_count: int, asof_str: str, inline_count: str, update_time: str, chart_png_b64: str) -> str:
 
     # Determine conditional styling for count cell
     count_style = ""
@@ -106,7 +106,7 @@ def build_html(latest_state: str, latest_count: int, asof_str: str, inline_count
   <div class="card">
     <h1><span class="badge {latest_state.lower()}">{latest_state.upper()}</span></h1>
     <table>
-      <thead><tr><th>Most Recent Count</th><th>Vehicles in Line</th></tr></thead>
+      <thead><tr><th>Car Count (out of 145)</th><th>Vehicles in Line</th></tr></thead>
       <tbody><tr>
         <td{count_style}>{latest_count}</td>
         <td style="font-weight: bold; font-size: 4em;">{inline_count}</td>
@@ -117,6 +117,7 @@ def build_html(latest_state: str, latest_count: int, asof_str: str, inline_count
     </table>
     <img class="chart" alt="Count vs Time" src="data:image/png;base64,{chart_png_b64}">
     <div class="muted">Count over time (x-axis shows times only).</div>
+    <div class="muted">Count updated at: {update_time}.</div>
   </div>
 </body>
 </html>"""
@@ -127,6 +128,7 @@ def main():
     input_path = f"/scriptdir/osvcount/data/osvcount.{today}.lst"
     asof_path = f"/scriptdir/osvcount/osvcount.asof"
     inline_path = f"/scriptdir/osvcount/osvcount.inline"
+    update_path = f"/scriptdir/osvcount/osvcount.update"
     output_path = f"/var/www/html/weatherdata/osvcount.html"
 
     rows = read_rows(input_path)
@@ -148,9 +150,18 @@ def main():
             if val:
                 inline_count = val
 
+    # Time data was updated, fall back to "N/A"
+    update_time = "N/A"
+    if os.path.exists(update_path):
+        with open(update_path, "r", encoding="utf-8") as f:
+            val = f.read().strip()
+            print(f"Time updated: {val}")
+            if val:
+                update_time = val
+
     png_bytes = make_plot_png(rows)
     b64 = base64.b64encode(png_bytes).decode("ascii")
-    html = build_html(latest_state, latest_count, asof_str, inline_count, b64)
+    html = build_html(latest_state, latest_count, asof_str, inline_count, update_time, b64)
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:

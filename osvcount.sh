@@ -17,6 +17,6 @@ curl -s https://osvcount.com > "$SCRIPT_DIR/osvcount.out"
 COUNT=$(cat "$SCRIPT_DIR/osvcount.num" 2>/dev/null || echo "N/A")
 STATE=$(cat "$SCRIPT_DIR/osvcount.state" 2>/dev/null || echo "N/A")
 TIMESTAMP=$(date +%Y%m%d_%H:%M:%S)
-
+echo $(date)  > osvcount.update
 # Append as comma-delimited line
 echo "$COUNT,$STATE,$TIMESTAMP" >> "$LOG_FILE"
